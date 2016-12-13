@@ -7,18 +7,66 @@
 //
 
 import UIKit
-
+import CoreData
+import Firebase
+import GoogleSignIn
+import GoogleMaps
+import GooglePlaces
 @UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate {
+
+class AppDelegate: UIResponder, UIApplicationDelegate, GIDSignInDelegate{
 
     var window: UIWindow?
-
-
+    let googleMapsApiKey = "AIzaSyDGlNKh8PyLNVLwKSvxPHC2CYmAntFDZZQ"
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplicationLaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
+        GMSServices.provideAPIKey(googleMapsApiKey)
+        GMSPlacesClient.provideAPIKey(googleMapsApiKey)
+        FIRApp.configure()
+        
+        GIDSignIn.sharedInstance().clientID = FIRApp.defaultApp()?.options.clientID
+        GIDSignIn.sharedInstance().delegate = self
+        
         return true
     }
-
+    
+    func sign(_ signIn: GIDSignIn!, didSignInFor user: GIDGoogleUser!, withError error: Error!) {
+        if let err = error{
+        
+        print("Failed to log into Google: ", err)
+            return
+        
+        }
+        
+        print("Successfully logged into Google", user)
+        
+        guard let idToken = user.authentication.idToken else{return}
+        guard let accessToken = user.authentication.accessToken else{return}
+        
+        let credentials = FIRGoogleAuthProvider.credential(withIDToken: idToken, accessToken: accessToken)
+        
+       
+        FIRAuth.auth()?.signIn(with: credentials, completion: {(user, error) in
+            if let err = error {
+            
+               print("Failed to create a Firebase User with Google account", err)
+                return
+            }
+            
+            guard let uid = user?.uid else{return }
+            print("Successfully logged into Firebase with Google", uid)
+        })
+    }
+    
+ 
+    
+    func application(_ app: UIApplication,
+                     open url: URL, options: [UIApplicationOpenURLOptionsKey: Any]=[:]) -> Bool {
+        return GIDSignIn.sharedInstance().handle(url ,
+                                                    sourceApplication: options[UIApplicationOpenURLOptionsKey.sourceApplication] as! String!,
+                                                    annotation: options[UIApplicationOpenURLOptionsKey.annotation])
+    }
+    
     func applicationWillResignActive(_ application: UIApplication) {
         // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
         // Use this method to pause ongoing tasks, disable timers, and invalidate graphics rendering callbacks. Games should use this method to pause the game.
@@ -40,7 +88,49 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func applicationWillTerminate(_ application: UIApplication) {
         // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
     }
-
-
+    // MARK: - Core Data stack
+    
+    lazy var persistentContainer: NSPersistentContainer = {
+        /*
+         The persistent container for the application. This implementation
+         creates and returns a container, having loaded the store for the
+         application to it. This property is optional since there are legitimate
+         error conditions that could cause the creation of the store to fail.
+         */
+        let container = NSPersistentContainer(name: "BeautyCoreData")
+        container.loadPersistentStores(completionHandler: { (storeDescription, error) in
+            if let error = error as NSError? {
+                // Replace this implementation with code to handle the error appropriately.
+                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
+                
+                /*
+                 Typical reasons for an error here include:
+                 * The parent directory does not exist, cannot be created, or disallows writing.
+                 * The persistent store is not accessible, due to permissions or data protection when the device is locked.
+                 * The device is out of space.
+                 * The store could not be migrated to the current model version.
+                 Check the error message to determine what the actual problem was.
+                 */
+                fatalError("Unresolved error \(error), \(error.userInfo)")
+            }
+        })
+        return container
+    }()
+    
+    // MARK: - Core Data Saving support
+    
+    func saveContext () {
+        let context = persistentContainer.viewContext
+        if context.hasChanges {
+            do {
+                try context.save()
+            } catch {
+                // Replace this implementation with code to handle the error appropriately.
+                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
+                let nserror = error as NSError
+                fatalError("Unresolved error \(nserror), \(nserror.userInfo)")
+            }
+        }
+    }
 }
 
